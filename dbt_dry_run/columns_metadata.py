@@ -90,9 +90,8 @@ def _to_fields(cols: Dict[str, ManifestColumn]) -> List[TableField]:
         raise InvalidColumnSpecification(
             "Schema not specified in `columns` attribute in metadata"
         )
-    sorted_columns = sorted(cols.keys())
     grouped_columns = groupby(
-        sorted_columns, lambda val: val.split(STRUCT_SEPERATOR)[0]
+        cols.keys(), lambda val: val.split(STRUCT_SEPERATOR)[0]
     )
     fields = {}
     for root_name, group_cols_iterator in grouped_columns:
