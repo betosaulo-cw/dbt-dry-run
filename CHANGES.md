@@ -1,5 +1,36 @@
 ## Changelog
 
+# dbt-dry-run v0.7.8
+
+## Improvements
+
+- Support RANGE datatype
+- Official compatibility with dbt v1.8
+
+# dbt-dry-run v0.7.7
+
+## Improvements
+
+- Official compatibility with dbt v1.7
+
+# dbt-dry-run v0.7.6
+
+## Improvements
+
+- Add `total_bytes_processed` to report artefact
+
+# dbt-dry-run v0.7.5
+
+## Bugfixes
+
+- Fix issue with incremental models where `sql_header` is set
+
+# dbt-dry-run v0.7.4
+
+## Bugfixes
+
+- Fix false failure when incremental models use `require_partition_filter=True`
+
 # dbt-dry-run v0.7.3
 
 ## Bugfixes

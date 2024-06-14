@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dbt-dry-run"
-version = "0.7.3"
+version = "0.7.8"
 description = "Dry run dbt projects"
 authors = ["Connor Charles <connor.charles@autotrader.co.uk>",
            "Phil hope <philip.hope@autotrader.co.uk>",
@@ -14,26 +14,34 @@ repository = "https://github.com/autotraderuk/dbt-dry-run"
 dbt-dry-run = "dbt_dry_run.__main__:main"
 
 [tool.poetry.dependencies]
-python = ">=3.8,<3.12"
-agate = "^1.6"
+python = ">=3.8,<3.13"
+agate = ">=1.7.0,<1.10"
 google-cloud-bigquery = "^3"
 pydantic = "^1.9.0"
 tenacity = "^8.2"
-networkx = "^2.6"
+networkx = ">=2.3,<4.0"
 pyyaml = "~6"
-typer = "^0.6.1"
+typer = "~0"
 
 [tool.poetry.dev-dependencies]
 black = "^22"
 isort = "^5.10.1"
 pytest = "^7.2.0"
-mypy = "^0.931"
+mypy = "^0.981"
 types-PyYAML = "^6.0.4"
 pytest-cov = "^4.0.0"
 twine = "^3.8.0"
 types-setuptools = "^57.4.9"
 pytest-mock = "^3.7.0"
-dbt-bigquery = "^1.6.0"
+dbt-bigquery = "~1.8.0"
+numpy = [
+  {version = ">=1.26", python = ">=3.9"},
+  {version = "<1.25", python = "=3.8"},
+]
+pandas = [
+  {version = ">=2.1.1", python = ">=3.12"},
+  {version = "<2.1", python = "=3.8"},
+]
 
 [build-system]
 requires = ["poetry-core>=1.5.0"]
@@ -48,7 +56,10 @@ filterwarnings = [
     "ignore:invalid escape sequence",
     "ignore:unclosed",
     "ignore:'cgi' is deprecated and slated for removal",
-    "ignore:Your application has authenticated using end user credentials"
+    "ignore:Your application has authenticated using end user credentials",
+    "ignore::UserWarning",
+    "ignore:.*custom tp_new.*in Python 3.14.*:DeprecationWarning",
+    "ignore:.*utcnow.*:DeprecationWarning",
 ]
 pythonpath = [
   "."
