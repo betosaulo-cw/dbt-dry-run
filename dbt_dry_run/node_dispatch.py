@@ -20,6 +20,15 @@ class RunnerKey:
 
 
 RUNNERS: Dict[RunnerKey, Type[NodeRunner]] = {
+    # custom materializations
+    RunnerKey("model", "alert"): TableRunner,
+    RunnerKey("model", "scd_table"): TableRunner,
+    RunnerKey("model", "scd_incremental"): TableRunner,
+    RunnerKey("model", "fm_table"): TableRunner,
+    RunnerKey("model", "fm_incremental"): IncrementalRunner,
+    RunnerKey("model", "fm_incremental_partitioned"): IncrementalRunner,
+    RunnerKey("model", "incremental_partitioned"): IncrementalRunner,
+    # default materializations
     RunnerKey("model", "incremental"): IncrementalRunner,
     RunnerKey("model", "table"): TableRunner,
     RunnerKey("model", "view"): ViewRunner,
