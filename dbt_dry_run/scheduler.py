@@ -26,7 +26,8 @@ class ManifestScheduler:
         "incremental",
         "seed",
         "snapshot",
-        "test"
+        "test",
+        "materialized_view",
     )
 
     def __init__(self, manifest: Manifest, model: Optional[str] = None):

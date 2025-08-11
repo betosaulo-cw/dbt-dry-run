@@ -2,13 +2,11 @@ from pathlib import Path
 from typing import Optional, Set
 from unittest.mock import MagicMock
 
-from dbt_dry_run import flags
-from dbt_dry_run.exception import NotCompiledException, UnknownSchemaException
-from dbt_dry_run.flags import Flags
-from dbt_dry_run.models import BigQueryFieldType
+from dbt_dry_run.exception import UnknownSchemaException
+from dbt_dry_run.models.dry_run_result import DryRunResult
 from dbt_dry_run.models.manifest import Node
+from dbt_dry_run.models.report import DryRunStatus
 from dbt_dry_run.node_runner.seed_runner import SeedRunner
-from dbt_dry_run.results import DryRunResult, DryRunStatus
 from dbt_dry_run.scheduler import ManifestScheduler
 from dbt_dry_run.test.utils import SimpleNode
 
@@ -50,6 +48,27 @@ def test_seed_runner_loads_file(tmp_path: Path) -> None:
     assert_success_and_columns_equal(node, expected_columns)
 
 
+def test_seed_runner_loads_file_with_custom_delimiter(tmp_path: Path) -> None:
+    delimiter = ";"
+    p = tmp_path / "seed1.csv"
+    csv_content = """a;b;c
+    foo;bar;baz
+    foo2;bar2;baz2
+    """
+    p.write_text(csv_content)
+
+    node = SimpleNode(
+        unique_id="node1",
+        depends_on=[],
+        resource_type=ManifestScheduler.SEED,
+        original_file_path=p.as_posix(),
+    ).to_node()
+    node.config.delimiter = delimiter
+
+    expected_columns = set(csv_content.splitlines()[0].split(delimiter))
+    assert_success_and_columns_equal(node, expected_columns)
+
+
 def test_seed_runner_fails_if_type_returns_none(tmp_path: Path) -> None:
     p = tmp_path / "seed1.csv"
     csv_content = """a,b,c
@@ -66,7 +85,7 @@ def test_seed_runner_fails_if_type_returns_none(tmp_path: Path) -> None:
     ).to_node()
     result = get_result(node, None)
     assert result.status == DryRunStatus.FAILURE
-    assert type(result.exception) == UnknownSchemaException
+    assert type(result.exception) is UnknownSchemaException
 
 
 def test_seed_runner_uses_column_overrides(tmp_path: Path) -> None:
@@ -103,5 +122,5 @@ def test_validate_node_returns_none_if_node_is_not_compiled() -> None:
 
     model_runner = SeedRunner(mock_sql_runner, results)
 
-    validation_result = model_runner.validate_node(node)
+    validation_result = model_runner.check_node_compiled(node)
     assert validation_result is None

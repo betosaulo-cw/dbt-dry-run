@@ -1,5 +1,4 @@
-from contextlib import contextmanager
-from typing import Generator, cast
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,7 +9,7 @@ from tenacity import RetryError, wait_none
 
 from dbt_dry_run.adapter.service import ProjectService
 from dbt_dry_run.exception import UnknownSchemaException
-from dbt_dry_run.results import DryRunStatus
+from dbt_dry_run.models.report import DryRunStatus
 from dbt_dry_run.sql_runner.big_query_sql_runner import (
     MAX_ATTEMPT_NUMBER,
     QUERY_TIMED_OUT,
@@ -56,7 +55,7 @@ def test_error_query_does_not_retry() -> None:
     sql_runner = BigQuerySQLRunner(cast(ProjectService, mock_project))
 
     expected_sql = "SELECT * FROM foo"
-    status, _, _, exc = sql_runner.query(expected_sql)
+    status, _, exc = sql_runner.query(expected_sql)
 
     assert status == DryRunStatus.FAILURE
     assert exc is raised_exception

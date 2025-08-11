@@ -5,6 +5,8 @@ from typing import Any, ClassVar, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, root_validator
 
+from dbt_dry_run import flags
+
 
 class NodeDependsOn(BaseModel):
     macros: List[str] = []
@@ -25,10 +27,21 @@ class IntPartitionRange(BaseModel):
     interval: int
 
 
+class TableRef(BaseModel):
+    database: str
+    db_schema: str
+    name: str
+
+    @property
+    def bq_literal(self) -> str:
+        return f"`{self.database}`.`{self.db_schema}`.`{self.name}`"
+
+
 class PartitionBy(BaseModel):
     field: str
     data_type: Literal["timestamp", "date", "datetime", "int64"]
     range: Optional[IntPartitionRange]
+    time_ingestion_partitioning: Optional[bool]
 
     @root_validator(pre=True)
     def lower_data_type(cls, values: Dict[str, Any]) -> Dict[str, Any]:
@@ -70,6 +83,7 @@ class NodeConfig(BaseModel):
     meta: Optional[NodeMeta]
     full_refresh: Optional[bool]
     column_types: Dict[str, str] = Field(default_factory=dict)
+    delimiter: Optional[str]
 
 
 class ManifestColumn(BaseModel):
@@ -121,12 +135,20 @@ class Node(BaseModel):
         values["alias"] = values.get("alias") or values["name"]
         return values
 
-    def to_table_ref_literal(self) -> str:
+    @property
+    def table_ref(self) -> TableRef:
         if self.alias:
-            sql = f"`{self.database}`.`{self.db_schema}`.`{self.alias}`"
+            name_param = self.alias
         else:
-            sql = f"`{self.database}`.`{self.db_schema}`.`{self.name}`"
-        return sql
+            name_param = self.name
+        return TableRef(
+            database=self.database,
+            db_schema=self.db_schema,
+            name=name_param,
+        )
+
+    def get_table_ref_literal(self) -> str:
+        return self.table_ref.bq_literal
 
     def get_combined_metadata(self, key: str) -> Optional[Any]:
         node_meta = self.meta.get(key) if self.meta else None
@@ -140,6 +162,19 @@ class Node(BaseModel):
     @property
     def is_seed(self) -> bool:
         return self.resource_type == "seed"
+
+    def get_should_full_refresh(self) -> bool:
+        # precedence defined here - https://docs.getdbt.com/reference/resource-configs/full_refresh
+        if self.config.full_refresh is not None:
+            return self.config.full_refresh
+        return flags.FULL_REFRESH
+
+    @property
+    def is_time_ingestion_partitioned(self) -> bool:
+        if self.config.partition_by:
+            if self.config.partition_by.time_ingestion_partitioning is True:
+                return True
+        return False
 
 
 class Macro(BaseModel):

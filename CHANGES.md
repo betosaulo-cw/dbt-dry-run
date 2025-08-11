@@ -1,5 +1,38 @@
 ## Changelog
 
+# dbt-dry-run v0.8.x
+
+## Bugfixes
+
+- Basic support for materialized views. This materialisation will be treated as a normal view. This means the dry run
+  may erroneously succeed if it contains SQL that is not supported for materialised views.
+
+# dbt-dry-run v0.8.3
+
+## Bugfixes
+
+- Fix dry runner falsely reporting failure when reading BQ columns that are masked via column-level access control
+
+# dbt-dry-run v0.8.2
+
+## Improvements
+
+- Support seeds with non default delimiters
+
+# dbt-dry-run v0.8.1
+
+## Improvements
+
+- Official compatibility with dbt v1.9
+- Drop support for python 3.8
+
+# dbt-dry-run v0.8.0
+
+## Improvements
+
+- Support for python 3.12
+- Add support incremental models for ingestion time partitioning
+
 # dbt-dry-run v0.7.8
 
 ## Improvements

@@ -1,13 +1,11 @@
-from dbt_dry_run.results import DryRunStatus
-from integration.conftest import DryRunResult
+from dbt_dry_run.models.report import DryRunStatus
+from integration.conftest import CompletedDryRun
 from integration.utils import (
-    assert_report_success,
     get_report_node_by_id,
-    assert_report_node_has_columns,
 )
 
 
-def test_compiled_models_pass(dry_run_result_skip_not_compiled: DryRunResult):
+def test_compiled_models_pass(dry_run_result_skip_not_compiled: CompletedDryRun):
     mart_node = get_report_node_by_id(
         dry_run_result_skip_not_compiled.report,
         "model.test_partially_compiled_project.run_mart_model",
@@ -27,7 +25,7 @@ def test_compiled_models_pass(dry_run_result_skip_not_compiled: DryRunResult):
     assert skipped_test_node.status == DryRunStatus.SKIPPED
 
 
-def test_not_compiled_models_pass(dry_run_result_skip_not_compiled: DryRunResult):
+def test_not_compiled_models_pass(dry_run_result_skip_not_compiled: CompletedDryRun):
     staging_node = get_report_node_by_id(
         dry_run_result_skip_not_compiled.report,
         "model.test_partially_compiled_project.skip_staging_model",

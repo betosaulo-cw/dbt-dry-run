@@ -1,11 +1,12 @@
 from typing import Set
 
 from dbt_dry_run.exception import SnapshotConfigException, UpstreamFailedException
-from dbt_dry_run.literals import insert_dependant_sql_literals
 from dbt_dry_run.models import BigQueryFieldMode, BigQueryFieldType, Table, TableField
+from dbt_dry_run.models.dry_run_result import DryRunResult
 from dbt_dry_run.models.manifest import Node
+from dbt_dry_run.models.report import DryRunStatus
 from dbt_dry_run.node_runner import NodeRunner
-from dbt_dry_run.results import DryRunResult, DryRunStatus
+from dbt_dry_run.sql.statements import SQLPreprocessor, insert_dependant_sql_literals
 
 
 def _check_cols_missing(node: Node, table: Table) -> Set[str]:
@@ -39,6 +40,8 @@ DBT_SNAPSHOT_FIELDS = [
 
 
 class SnapshotRunner(NodeRunner):
+    preprocessor = SQLPreprocessor([insert_dependant_sql_literals])
+
     @staticmethod
     def _validate_snapshot_config(node: Node, result: DryRunResult) -> DryRunResult:
         if not result.table:
@@ -56,7 +59,6 @@ class SnapshotRunner(NodeRunner):
                 node=result.node,
                 table=result.table,
                 status=DryRunStatus.FAILURE,
-                total_bytes_processed=0,
                 exception=exception,
             )
         if node.config.strategy == "timestamp":
@@ -68,7 +70,6 @@ class SnapshotRunner(NodeRunner):
                     node=result.node,
                     table=result.table,
                     status=DryRunStatus.FAILURE,
-                    total_bytes_processed=0,
                     exception=exception,
                 )
         elif node.config.strategy == "check":
@@ -80,7 +81,6 @@ class SnapshotRunner(NodeRunner):
                     node=result.node,
                     table=result.table,
                     status=DryRunStatus.FAILURE,
-                    total_bytes_processed=0,
                     exception=exception,
                 )
         else:
@@ -89,19 +89,16 @@ class SnapshotRunner(NodeRunner):
 
     def run(self, node: Node) -> DryRunResult:
         try:
-            run_sql = insert_dependant_sql_literals(node, self._results)
+            run_sql = self.preprocessor(node, self._results)
         except UpstreamFailedException as e:
-            return DryRunResult(node, None, DryRunStatus.FAILURE, 0, e)
+            return DryRunResult(node, None, DryRunStatus.FAILURE, e)
 
         (
             status,
             predicted_table,
-            total_bytes_processed,
             exception,
         ) = self._sql_runner.query(run_sql)
-        result = DryRunResult(
-            node, predicted_table, status, total_bytes_processed, exception
-        )
+        result = DryRunResult(node, predicted_table, status, exception)
         if result.status == DryRunStatus.SUCCESS and result.table:
             result.table.fields = [*result.table.fields, *DBT_SNAPSHOT_FIELDS]
             result = self._validate_snapshot_config(node, result)
