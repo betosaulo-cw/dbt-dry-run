@@ -10,6 +10,7 @@ from dbt_dry_run.node_runner.snapshot_runner import SnapshotRunner
 from dbt_dry_run.node_runner.source_runner import SourceRunner
 from dbt_dry_run.node_runner.table_runner import TableRunner
 from dbt_dry_run.node_runner.view_runner import ViewRunner
+from dbt_dry_run.node_runner.plain_runner import PlainRunner
 from dbt_dry_run.results import DryRunResult
 
 
@@ -21,17 +22,17 @@ class RunnerKey:
 
 RUNNERS: Dict[RunnerKey, Type[NodeRunner]] = {
     # custom materializations
-    RunnerKey("model", "alert"): TableRunner,
-    RunnerKey("model", "scd_table"): TableRunner,
-    RunnerKey("model", "scd_incremental"): TableRunner,
-    RunnerKey("model", "fm_table"): TableRunner,
-    RunnerKey("model", "fm_incremental"): TableRunner,
-    RunnerKey("model", "fm_incremental_partitioned"): TableRunner,
-    RunnerKey("model", "incremental_partitioned"): IncrementalRunner,
+    RunnerKey("model", "alert"): PlainRunner,
+    RunnerKey("model", "scd_table"): PlainRunner,
+    RunnerKey("model", "scd_incremental"): PlainRunner,
+    RunnerKey("model", "fm_table"): PlainRunner,
+    RunnerKey("model", "fm_incremental"): PlainRunner,
+    RunnerKey("model", "fm_incremental_partitioned"): PlainRunner,
+    RunnerKey("model", "incremental_partitioned"): PlainRunner,
     # default materializations
-    RunnerKey("model", "incremental"): IncrementalRunner,
-    RunnerKey("model", "table"): TableRunner,
-    RunnerKey("model", "view"): ViewRunner,
+    RunnerKey("model", "incremental"): PlainRunner,
+    RunnerKey("model", "table"): PlainRunner,
+    RunnerKey("model", "view"): PlainRunner,
     RunnerKey("test", "test"): NodeTestRunner,
     RunnerKey("snapshot", "snapshot"): SnapshotRunner,
     RunnerKey("seed", "seed"): SeedRunner,
