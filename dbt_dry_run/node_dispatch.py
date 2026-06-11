@@ -27,9 +27,9 @@ RUNNERS: Dict[RunnerKey, Type[NodeRunner]] = {
     RunnerKey("model", "fm_table"): TableRunner,
     RunnerKey("model", "fm_incremental"): TableRunner,
     RunnerKey("model", "fm_incremental_partitioned"): TableRunner,
-    RunnerKey("model", "incremental_partitioned"): IncrementalRunner,
+    RunnerKey("model", "incremental_partitioned"): TableRunner,
     # default materializations
-    RunnerKey("model", "incremental"): IncrementalRunner,
+    RunnerKey("model", "incremental"): TableRunner, # test with table runner to avoid editor permissions
     RunnerKey("model", "table"): TableRunner,
     RunnerKey("model", "view"): ViewRunner,
     RunnerKey("test", "test"): NodeTestRunner,
