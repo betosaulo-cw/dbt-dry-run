@@ -130,8 +130,9 @@ For example the full metadata for this model:
 models:
   - name: badly_documented_model
     description: This model is missing some columns in its docs
-    meta:
-      dry_run.check_columns: true
+    config:
+      meta:
+        dry_run.check_columns: true
     columns:
       - name: a
         description: This is in the model

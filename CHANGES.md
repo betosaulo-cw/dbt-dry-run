@@ -1,5 +1,11 @@
 ## Changelog
 
+# dbt-dry-run v0.10.1
+
+## Under The Hood
+
+- Do not read deprecated top level 'meta' key in nodes as this was deprecated a while ago and is not compatible with fusion
+
 # dbt-dry-run v0.10.0
 
 ## Improvements

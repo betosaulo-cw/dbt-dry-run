@@ -52,6 +52,7 @@ version. If there are new features or minor breaking changes then bump the minor
 we would bump the major version to 1 in the immediate future until the package is more widely used in production.
 
 To bump the version update the version in `pyproject.toml`
+Then run `uv lock`
 
 ## Update CHANGES.md
 
