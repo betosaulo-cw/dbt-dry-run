@@ -122,7 +122,6 @@ class Node(BaseModel):
     original_file_path: str
     root_path: Optional[str] = None
     columns: Dict[str, ManifestColumn] = Field(default_factory=dict)
-    meta: Optional[NodeMeta] = None
     external: Optional[ExternalConfig] = None
 
     @model_validator(mode="before")
@@ -145,11 +144,9 @@ class Node(BaseModel):
     def get_table_ref_literal(self) -> str:
         return self.table_ref.bq_literal
 
-    def get_combined_metadata(self, key: str) -> Optional[Any]:
-        node_meta = self.meta.get(key) if self.meta else None
+    def get_meta_key(self, key: str) -> Optional[Any]:
         config_meta = self.config.meta.get(key) if self.config.meta else None
-        merged_meta = config_meta if config_meta is not None else node_meta
-        return merged_meta
+        return config_meta
 
     def is_external_source(self) -> bool:
         return self.external is not None and self.resource_type == "source"

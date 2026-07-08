@@ -18,15 +18,13 @@ from dbt_dry_run.sql_runner.big_query_sql_runner import BigQuerySQLRunner
 
 
 def should_check_columns(node: Node) -> bool:
-    check_column = node.get_combined_metadata("dry_run.check_columns")
+    check_column = node.get_meta_key("dry_run.check_columns")
 
     if check_column is not None:
         return bool(check_column)
 
     if flags.EXTRA_CHECK_COLUMNS_METADATA_KEY is not None:
-        extra_check_column = node.get_combined_metadata(
-            flags.EXTRA_CHECK_COLUMNS_METADATA_KEY
-        )
+        extra_check_column = node.get_meta_key(flags.EXTRA_CHECK_COLUMNS_METADATA_KEY)
         return bool(extra_check_column) if extra_check_column is not None else False
 
     return False
