@@ -4,31 +4,16 @@ import pytest
 
 from dbt_dry_run import flags
 from dbt_dry_run.exception import NotCompiledException
-from dbt_dry_run.literals import enable_test_example_values
 from dbt_dry_run.models import BigQueryFieldType, Table, TableField
-from dbt_dry_run.models.manifest import NodeConfig
+from dbt_dry_run.models.manifest import NodeConfig, SnapshotMetaColumnName
+from dbt_dry_run.models.report import DryRunStatus
 from dbt_dry_run.node_runner.snapshot_runner import SnapshotRunner
-from dbt_dry_run.results import DryRunStatus, Results
+from dbt_dry_run.results import Results
 from dbt_dry_run.scheduler import ManifestScheduler
+from dbt_dry_run.sql.literals import enable_test_example_values
 from dbt_dry_run.test.utils import SimpleNode
 
 enable_test_example_values(True)
-
-A_SIMPLE_TABLE = Table(
-    fields=[
-        TableField(
-            name="a",
-            type=BigQueryFieldType.STRING,
-        )
-    ]
-)
-
-
-def get_executed_sql(mock: MagicMock) -> str:
-    call_args = mock.query.call_args_list
-    assert len(call_args) == 1
-    executed_sql = call_args[0].args[0]
-    return executed_sql
 
 
 def test_snapshot_with_check_all_strategy_runs_sql_with_id() -> None:
@@ -41,7 +26,7 @@ def test_snapshot_with_check_all_strategy_runs_sql_with_id() -> None:
             )
         ]
     )
-    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, 0, None)
+    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, None)
 
     node = SimpleNode(
         unique_id="node1",
@@ -59,11 +44,57 @@ def test_snapshot_with_check_all_strategy_runs_sql_with_id() -> None:
 
     result = model_runner.run(node)
     mock_sql_runner.query.assert_called_with(node.compiled_code)
-    assert (
-        result.status == DryRunStatus.SUCCESS
-    ), f"Failed with error: {result.exception}"
+    assert result.status == DryRunStatus.SUCCESS, (
+        f"Failed with error: {result.exception}"
+    )
     assert result.table
     assert result.table.fields[0].name == expected_table.fields[0].name
+
+
+def test_snapshot_with_hard_deletes_new_record_returns_all_meta_columns() -> None:
+    mock_sql_runner = MagicMock()
+    expected_table = Table(
+        fields=[
+            TableField(
+                name="a",
+                type=BigQueryFieldType.STRING,
+            )
+        ]
+    )
+    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, None)
+
+    node = SimpleNode(
+        unique_id="node1",
+        depends_on=[],
+        resource_type=ManifestScheduler.SNAPSHOT,
+        table_config=NodeConfig(
+            unique_key="a",
+            strategy="check",
+            check_cols="all",
+            materialized="snapshot",
+            hard_deletes="new_record",
+        ),
+    ).to_node()
+    node.depends_on.deep_nodes = []
+
+    results = Results()
+
+    model_runner = SnapshotRunner(mock_sql_runner, results)
+
+    result = model_runner.run(node)
+    mock_sql_runner.query.assert_called_with(node.compiled_code)
+    assert result.status == DryRunStatus.SUCCESS, (
+        f"Failed with error: {result.exception}"
+    )
+    assert result.table
+    assert result.table.field_names == {
+        "a",
+        SnapshotMetaColumnName.DBT_SCD_ID,
+        SnapshotMetaColumnName.DBT_UPDATED_AT,
+        SnapshotMetaColumnName.DBT_VALID_FROM,
+        SnapshotMetaColumnName.DBT_VALID_TO,
+        SnapshotMetaColumnName.DBT_IS_DELETED,
+    }
 
 
 def test_snapshot_with_check_all_strategy_fails_without_id() -> None:
@@ -76,7 +107,7 @@ def test_snapshot_with_check_all_strategy_fails_without_id() -> None:
             )
         ]
     )
-    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, 0, None)
+    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, None)
 
     node = SimpleNode(
         unique_id="node1",
@@ -114,7 +145,7 @@ def test_snapshot_with_check_all_strategy_runs_sql_with_matching_columns() -> No
             ),
         ]
     )
-    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, 0, None)
+    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, None)
 
     node = SimpleNode(
         unique_id="node1",
@@ -135,9 +166,9 @@ def test_snapshot_with_check_all_strategy_runs_sql_with_matching_columns() -> No
 
     result = model_runner.run(node)
     mock_sql_runner.query.assert_called_with(node.compiled_code)
-    assert (
-        result.status == DryRunStatus.SUCCESS
-    ), f"Failed with error: {result.exception}"
+    assert result.status == DryRunStatus.SUCCESS, (
+        f"Failed with error: {result.exception}"
+    )
     assert result.table
     assert result.table.fields[0].name == expected_table.fields[0].name
 
@@ -152,7 +183,7 @@ def test_snapshot_with_check_cols_strategy_fails_with_missing_column() -> None:
             )
         ]
     )
-    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, 0, None)
+    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, None)
 
     node = SimpleNode(
         unique_id="node1",
@@ -187,7 +218,7 @@ def test_snapshot_with_timestamp_strategy_with_updated_at_column() -> None:
             TableField(name="last_updated_col", type=BigQueryFieldType.TIMESTAMP),
         ]
     )
-    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, 0, None)
+    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, None)
 
     node = SimpleNode(
         unique_id="node1",
@@ -222,7 +253,7 @@ def test_snapshot_with_timestamp_strategy_with_missing_updated_at_column() -> No
             TableField(name="last_updated_col", type=BigQueryFieldType.TIMESTAMP),
         ]
     )
-    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, 0, None)
+    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, None)
 
     node = SimpleNode(
         unique_id="node1",
@@ -261,7 +292,7 @@ def test_snapshot_with_list_of_unique_key_columns_raises_error() -> None:
             TableField(name="last_updated_col", type=BigQueryFieldType.TIMESTAMP),
         ]
     )
-    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, 0, None)
+    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, expected_table, None)
 
     node = SimpleNode(
         unique_id="node1",
@@ -298,7 +329,7 @@ def test_validate_node_fails_if_skip_not_compiled_is_false(
 
     model_runner = SnapshotRunner(mock_sql_runner, results)
 
-    validation_result = model_runner.validate_node(node)
+    validation_result = model_runner.check_node_compiled(node)
     assert validation_result
     assert validation_result.status == DryRunStatus.FAILURE
     assert isinstance(validation_result.exception, NotCompiledException)
@@ -318,7 +349,7 @@ def test_validate_node_skips_if_skip_not_compiled_is_true(
 
     model_runner = SnapshotRunner(mock_sql_runner, results)
 
-    validation_result = model_runner.validate_node(node)
+    validation_result = model_runner.check_node_compiled(node)
     assert validation_result
     assert validation_result.status == DryRunStatus.SKIPPED
     assert validation_result.exception is None

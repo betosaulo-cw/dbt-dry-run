@@ -2,7 +2,7 @@ import os
 import subprocess
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Optional, Iterable, Generator
+from typing import Optional, Iterable, Generator, cast
 
 import pytest
 from _pytest.fixtures import FixtureRequest
@@ -13,9 +13,14 @@ from google.cloud.bigquery import Client
 
 
 @dataclass
-class DryRunResult:
-    process: subprocess.CompletedProcess
+class CompletedDryRun:
+    process: subprocess.CompletedProcess[bytes]
     report: Optional[Report]
+
+    def get_report(self) -> Report:
+        if not self.report:
+            raise ValueError("Dry run report is not available")
+        return self.report
 
 
 class ProjectContext:
@@ -43,7 +48,7 @@ class ProjectContext:
         partition_by: Optional[str] = None,
         require_partition_by: bool = False,
     ) -> Generator[None, None, None]:
-        node_name = node.to_table_ref_literal()
+        node_name = node.table_ref.bq_literal
         schema_csv = ",\n".join(columns)
         partition_by_clause = f"""
         PARTITION BY {partition_by}
@@ -58,7 +63,7 @@ class ProjectContext:
             )
             {partition_by_clause};
         """
-        client: Client = self._project.get_connection().handle
+        client: Client = cast(Client, self._project.get_connection().handle)
         client.query(create_ddl)
         yield
         drop_ddl = f"""
@@ -75,7 +80,7 @@ class ProjectContext:
 
     def dry_run(
         self, skip_not_compiled: bool = False, full_refresh: bool = False
-    ) -> DryRunResult:
+    ) -> CompletedDryRun:
         report_path = os.path.join(self.target_path, "dry_run_output.json")
         if os.path.exists(report_path):
             os.remove(report_path)
@@ -102,11 +107,12 @@ class ProjectContext:
         run_dry_run = subprocess.run(dry_run_args, capture_output=True)
 
         if os.path.exists(report_path):
-            dry_run_report = Report.parse_file(report_path)
+            with open(report_path, "r") as f:
+                dry_run_report = Report.model_validate_json(f.read())
         else:
             dry_run_report = None
 
-        return DryRunResult(run_dry_run, dry_run_report)
+        return CompletedDryRun(run_dry_run, dry_run_report)
 
 
 def running_in_github() -> bool:
@@ -115,22 +121,28 @@ def running_in_github() -> bool:
 
 def _dry_run_result(
     project: ProjectContext, skip_not_compiled: bool = False, full_refresh: bool = False
-) -> DryRunResult:
+) -> CompletedDryRun:
     return project.dry_run(skip_not_compiled, full_refresh)
 
 
 @pytest.fixture(scope="module")
-def dry_run_result_skip_not_compiled(compiled_project: ProjectContext) -> DryRunResult:
+def dry_run_result_skip_not_compiled(
+    compiled_project: ProjectContext,
+) -> Generator[CompletedDryRun, None, None]:
     yield _dry_run_result(compiled_project, skip_not_compiled=True)
 
 
 @pytest.fixture(scope="module")
-def dry_run_result_full_refresh(compiled_project: ProjectContext) -> DryRunResult:
+def dry_run_result_full_refresh(
+    compiled_project: ProjectContext,
+) -> Generator[CompletedDryRun, None, None]:
     yield _dry_run_result(compiled_project, full_refresh=True)
 
 
 @pytest.fixture(scope="module")
-def dry_run_result(compiled_project: ProjectContext) -> DryRunResult:
+def dry_run_result(
+    compiled_project: ProjectContext,
+) -> Generator[CompletedDryRun, None, None]:
     yield _dry_run_result(compiled_project)
 
 
@@ -147,8 +159,8 @@ def compiled_project_full_refresh(request: FixtureRequest) -> ProjectContext:
 def _compiled_project(
     request: FixtureRequest, full_refresh: bool = False
 ) -> ProjectContext:
-    folder = request.fspath.dirname
-    profiles_dir = os.path.join(request.config.rootdir, "integration/profiles")
+    folder = request.path.parent.as_posix()
+    profiles_dir = os.path.join(request.config.rootpath, "integration/profiles")
     target_path = os.path.join(folder, "target")
     if full_refresh:
         target_path = os.path.join(folder, "target-full-refresh")
@@ -174,7 +186,7 @@ def _compiled_project(
         dbt_args,
         capture_output=True,
     )
-    test_display_name = f"{request.keywords.node.name}/{request.node.name}"
+    test_display_name = f"{request.node.name}/{request.node.name}"
 
     dbt_stdout = run_dbt.stdout.decode("utf-8")
     if run_dbt.returncode != 0:

@@ -3,7 +3,17 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, root_validator
+from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
+
+from dbt_dry_run import flags
+
+
+class SnapshotMetaColumnName(str, Enum):
+    DBT_VALID_FROM = "dbt_valid_from"
+    DBT_VALID_TO = "dbt_valid_to"
+    DBT_SCD_ID = "dbt_scd_id"
+    DBT_UPDATED_AT = "dbt_updated_at"
+    DBT_IS_DELETED = "dbt_is_deleted"
 
 
 class NodeDependsOn(BaseModel):
@@ -25,57 +35,67 @@ class IntPartitionRange(BaseModel):
     interval: int
 
 
+class TableRef(BaseModel):
+    database: str
+    db_schema: str
+    name: str
+
+    @property
+    def bq_literal(self) -> str:
+        return f"`{self.database}`.`{self.db_schema}`.`{self.name}`"
+
+
 class PartitionBy(BaseModel):
     field: str
     data_type: Literal["timestamp", "date", "datetime", "int64"]
-    range: Optional[IntPartitionRange]
+    range: Optional[IntPartitionRange] = None
+    time_ingestion_partitioning: Optional[bool] = None
 
-    @root_validator(pre=True)
+    @model_validator(mode="before")
     def lower_data_type(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         values["data_type"] = values["data_type"].lower()
         return values
 
 
-class NodeMeta(BaseModel):
+class NodeMeta(RootModel[Dict[str, Any]]):
     DEFAULT_CHECK_COLUMNS_KEY: ClassVar[str] = "dry_run.check_columns"
 
-    __root__: Dict[str, Any]
-
     def get(self, key: str) -> Optional[Any]:
-        return self.__root__.get(key)
+        return self.root.get(key)
 
     def __getitem__(self, key: str) -> Any:
         try:
-            return self.__root__[key]
+            return self.root[key]
         except KeyError:
             raise KeyError(f"Node does not have metadata '{key}'")
 
     def __contains__(self, key: str) -> bool:
-        return key in self.__root__
+        return key in self.root
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class NodeConfig(BaseModel):
     enabled: bool = True
-    materialized: Optional[str]
-    on_schema_change: Optional[OnSchemaChange]
-    sql_header: Optional[str]
-    unique_key: Optional[Union[str, List[str]]]
-    updated_at: Optional[str]
-    strategy: Union[None, Literal["timestamp", "check"]]
-    check_cols: Optional[Union[Literal["all"], List[str]]]
-    partition_by: Optional[PartitionBy]
-    meta: Optional[NodeMeta]
-    full_refresh: Optional[bool]
+    materialized: Optional[str] = None
+    on_schema_change: Optional[OnSchemaChange] = None
+    sql_header: Optional[str] = None
+    unique_key: Optional[Union[str, List[str]]] = None
+    updated_at: Optional[str] = None
+    strategy: Union[None, Literal["timestamp", "check"]] = None
+    check_cols: Optional[Union[Literal["all"], List[str]]] = None
+    partition_by: Optional[PartitionBy] = None
+    meta: Optional[NodeMeta] = None
+    full_refresh: Optional[bool] = None
     column_types: Dict[str, str] = Field(default_factory=dict)
+    delimiter: Optional[str] = None
+    hard_deletes: Optional[Literal["ignore", "invalidate", "new_record"]] = None
 
 
 class ManifestColumn(BaseModel):
     name: str
-    description: Optional[str]
-    data_type: Optional[str]
+    description: Optional[str] = None
+    data_type: Optional[str] = None
 
 
 class ExternalConfig(BaseModel):
@@ -100,39 +120,38 @@ class Node(BaseModel):
     compiled: bool = False
     compiled_code: str = ""
     database: str
-    db_schema: str = Field(..., alias="schema")
+    db_schema: str = Field(..., alias="schema", serialization_alias="schema")
     alias: str
     language: Optional[str] = None
     resource_type: str
     original_file_path: str
     root_path: Optional[str] = None
-    columns: Dict[str, ManifestColumn]
-    meta: Optional[NodeMeta]
-    external: Optional[ExternalConfig]
+    columns: Dict[str, ManifestColumn] = Field(default_factory=dict)
+    external: Optional[ExternalConfig] = None
 
-    def __init__(self, **data: Any):
-        super().__init__(
-            compiled_code=data.pop("compiled_code", "") or data.pop("compiled_sql", ""),
-            **data,
-        )
-
-    @root_validator(pre=True)
+    @model_validator(mode="before")
     def default_alias(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         values["alias"] = values.get("alias") or values["name"]
         return values
 
-    def to_table_ref_literal(self) -> str:
+    @property
+    def table_ref(self) -> TableRef:
         if self.alias:
-            sql = f"`{self.database}`.`{self.db_schema}`.`{self.alias}`"
+            name_param = self.alias
         else:
-            sql = f"`{self.database}`.`{self.db_schema}`.`{self.name}`"
-        return sql
+            name_param = self.name
+        return TableRef(
+            database=self.database,
+            db_schema=self.db_schema,
+            name=name_param,
+        )
 
-    def get_combined_metadata(self, key: str) -> Optional[Any]:
-        node_meta = self.meta.get(key) if self.meta else None
+    def get_table_ref_literal(self) -> str:
+        return self.table_ref.bq_literal
+
+    def get_meta_key(self, key: str) -> Optional[Any]:
         config_meta = self.config.meta.get(key) if self.config.meta else None
-        merged_meta = config_meta if config_meta is not None else node_meta
-        return merged_meta
+        return config_meta
 
     def is_external_source(self) -> bool:
         return self.external is not None and self.resource_type == "source"
@@ -140,6 +159,19 @@ class Node(BaseModel):
     @property
     def is_seed(self) -> bool:
         return self.resource_type == "seed"
+
+    def get_should_full_refresh(self) -> bool:
+        # precedence defined here - https://docs.getdbt.com/reference/resource-configs/full_refresh
+        if self.config.full_refresh is not None:
+            return self.config.full_refresh
+        return flags.FULL_REFRESH
+
+    @property
+    def is_time_ingestion_partitioned(self) -> bool:
+        if self.config.partition_by:
+            if self.config.partition_by.time_ingestion_partitioning is True:
+                return True
+        return False
 
 
 class Macro(BaseModel):

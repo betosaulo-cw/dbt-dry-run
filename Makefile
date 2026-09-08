@@ -1,37 +1,51 @@
+.PHONY: install
+install:
+	uv sync --all-groups
+
 .PHONY: test
 test:
-	pytest --cov=dbt_dry_run
+	uv run pytest --cov=dbt_dry_run
 
 .PHONY: testcov
 testcov: test
-	@echo "building coverage html"
-	@coverage html
+	uv run coverage html
 
 .PHONY: integration
 integration:
-	pytest ./integration
+	uv run pytest ./integration
 
 .PHONY: mypy
 mypy:
-	mypy dbt_dry_run
+	uv run mypy dbt_dry_run integration
+
+.PHONY: lint
+lint:
+	uv run ruff check
 
 .PHONY: format
 format:
-	black dbt_dry_run
-	black integration
-	isort dbt_dry_run
+	uv run ruff format dbt_dry_run
+	uv run ruff format integration
 
 .PHONY: verify
-verify: format mypy testcov
+verify: format mypy lint testcov
 
 .PHONY: build
 build: verify
 	git diff --exit-code # Exit 1 if there are changes from format
 	rm -r ./dist || true
-	poetry build
+	uv build
 
 .PHONY: release
 release:
 	git diff HEAD main --quiet || (echo 'Must release in main' && false)
-	twine upload ./dist/*.whl
-	twine upload ./dist/*.tar.gz
+	uv run twine upload ./dist/*.whl
+	uv run twine upload ./dist/*.tar.gz
+
+.PHONY: gha-pr
+gha-pr:
+	act pull_request
+
+.PHONY: gha-push
+gha-push:
+	act push

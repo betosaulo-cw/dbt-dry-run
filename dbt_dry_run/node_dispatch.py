@@ -1,17 +1,18 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Type
+from typing import Dict, Optional, Type
 
+from dbt_dry_run.models.dry_run_result import DryRunResult
 from dbt_dry_run.models.manifest import Node
 from dbt_dry_run.node_runner import NodeRunner
 from dbt_dry_run.node_runner.incremental_runner import IncrementalRunner
+from dbt_dry_run.node_runner.materialized_view_runner import MaterializedViewRunner
 from dbt_dry_run.node_runner.node_test_runner import NodeTestRunner
+from dbt_dry_run.node_runner.plain_runner import PlainRunner
 from dbt_dry_run.node_runner.seed_runner import SeedRunner
 from dbt_dry_run.node_runner.snapshot_runner import SnapshotRunner
 from dbt_dry_run.node_runner.source_runner import SourceRunner
 from dbt_dry_run.node_runner.table_runner import TableRunner
 from dbt_dry_run.node_runner.view_runner import ViewRunner
-from dbt_dry_run.node_runner.plain_runner import PlainRunner
-from dbt_dry_run.results import DryRunResult
 
 
 @dataclass(frozen=True, eq=True)
@@ -50,7 +51,7 @@ def dispatch_node(node: Node, runners: Dict[RunnerKey, NodeRunner]) -> DryRunRes
         runner = runners[_runner_key]
     except KeyError:
         raise ValueError(f"Unknown node '{_runner_key}'")
-    validation_result = runner.validate_node(node)
+    validation_result = runner.check_node_compiled(node)
     if validation_result:
         return validation_result
     return runner.run(node)

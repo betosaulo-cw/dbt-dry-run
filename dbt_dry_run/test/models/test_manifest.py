@@ -1,6 +1,6 @@
 import pytest
 
-from dbt_dry_run.models.manifest import Node, NodeConfig, NodeMeta, PartitionBy
+from dbt_dry_run.models.manifest import NodeConfig, NodeMeta, PartitionBy
 from dbt_dry_run.test.utils import SimpleNode
 
 
@@ -10,41 +10,42 @@ def test_partition_by_config_case_insensitive() -> None:
     assert partition_by.data_type == "timestamp"
 
 
-def test_node_get_combined_metadata_inherits_from_node_meta() -> None:
-    config = NodeConfig(materialized="table", meta=None)
-    node = SimpleNode(
-        unique_id="a",
-        depends_on=[],
-        table_config=config,
-        meta=NodeMeta.parse_obj({NodeMeta.DEFAULT_CHECK_COLUMNS_KEY: True}),
-    ).to_node()
-
-    assert node.get_combined_metadata(NodeMeta.DEFAULT_CHECK_COLUMNS_KEY) is True
-
-
 @pytest.mark.parametrize("config_meta", [False, True])
-def test_node_get_combined_metadata_is_overridden_by_config(
+def test_node_get_meta_key_return_config_meta(
     config_meta: bool,
 ) -> None:
     config = NodeConfig(
         materialized="table",
-        meta=NodeMeta.parse_obj({NodeMeta.DEFAULT_CHECK_COLUMNS_KEY: config_meta}),
+        meta=NodeMeta.model_validate({NodeMeta.DEFAULT_CHECK_COLUMNS_KEY: config_meta}),
     )
     node = SimpleNode(
         unique_id="a",
         depends_on=[],
         table_config=config,
-        meta=NodeMeta.parse_obj({NodeMeta.DEFAULT_CHECK_COLUMNS_KEY: not config_meta}),
     ).to_node()
 
-    assert node.get_combined_metadata(NodeMeta.DEFAULT_CHECK_COLUMNS_KEY) is config_meta
+    assert node.get_meta_key(NodeMeta.DEFAULT_CHECK_COLUMNS_KEY) is config_meta
+
+
+def test_node_get_meta_key_none_if_meta_is_none() -> None:
+    config = NodeConfig(
+        materialized="table",
+        meta=None,
+    )
+    node = SimpleNode(
+        unique_id="a",
+        depends_on=[],
+        table_config=config,
+    ).to_node()
+
+    assert node.get_meta_key("ANY_KEY") is None
 
 
 def test_metadata_parses_check_columns() -> None:
-    metadata = NodeMeta.parse_obj({NodeMeta.DEFAULT_CHECK_COLUMNS_KEY: False})
+    metadata = NodeMeta.model_validate({NodeMeta.DEFAULT_CHECK_COLUMNS_KEY: False})
     assert metadata[NodeMeta.DEFAULT_CHECK_COLUMNS_KEY] is False
 
 
 def test_metadata_contains_key() -> None:
-    metadata = NodeMeta.parse_obj({"my_key": False})
+    metadata = NodeMeta.model_validate({"my_key": False})
     assert ("my_key" in metadata) is True

@@ -1,37 +1,30 @@
 from concurrent import futures
+from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Dict, Generator, List, Optional, Tuple
+from typing import Dict, Generator, List, Optional, Tuple
 
 from dbt_dry_run import flags
 from dbt_dry_run.adapter.service import ProjectService
-from dbt_dry_run.linting.column_linting import lint_columns
-from dbt_dry_run.node_dispatch import RUNNERS, RunnerKey, dispatch_node
-from dbt_dry_run.sql_runner import SQLRunner
-
-if TYPE_CHECKING:
-    from mypy.typeshed.stdlib.concurrent.futures._base import Future
-else:
-    from typing import Awaitable as Future
-
 from dbt_dry_run.exception import ManifestValidationError, NodeExecutionException
+from dbt_dry_run.linting.column_linting import lint_columns
 from dbt_dry_run.models.manifest import Manifest, Node
+from dbt_dry_run.node_dispatch import RUNNERS, RunnerKey, dispatch_node
 from dbt_dry_run.node_runner import NodeRunner
 from dbt_dry_run.results import Results
 from dbt_dry_run.scheduler import ManifestScheduler
+from dbt_dry_run.sql_runner import SQLRunner
 from dbt_dry_run.sql_runner.big_query_sql_runner import BigQuerySQLRunner
 
 
 def should_check_columns(node: Node) -> bool:
-    check_column = node.get_combined_metadata("dry_run.check_columns")
+    check_column = node.get_meta_key("dry_run.check_columns")
 
     if check_column is not None:
         return bool(check_column)
 
     if flags.EXTRA_CHECK_COLUMNS_METADATA_KEY is not None:
-        extra_check_column = node.get_combined_metadata(
-            flags.EXTRA_CHECK_COLUMNS_METADATA_KEY
-        )
+        extra_check_column = node.get_meta_key(flags.EXTRA_CHECK_COLUMNS_METADATA_KEY)
         return bool(extra_check_column) if extra_check_column is not None else False
 
     return False
@@ -53,7 +46,7 @@ def dry_run_node(
 def create_context(
     project: ProjectService,
 ) -> Generator[Tuple[SQLRunner, ThreadPoolExecutor], None, None]:
-    sql_runner: Optional[SQLRunner] = None
+    sql_runner: Optional[SQLRunner]
     executor: Optional[ThreadPoolExecutor] = None
     try:
         sql_runner = BigQuerySQLRunner(project)
@@ -99,9 +92,7 @@ def dry_run_manifest(project: ProjectService) -> Results:
         for generation_id, generation in enumerate(scheduler):
             gen_futures: Dict[str, Future[None]] = {}
             for node in generation:
-                task_future: Future[None] = executor.submit(
-                    dry_run_node, runners, node, results
-                )
+                task_future = executor.submit(dry_run_node, runners, node, results)
                 gen_futures[node.unique_id] = task_future
             _wait_for_generation(gen_futures)
 

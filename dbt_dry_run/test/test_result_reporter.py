@@ -3,14 +3,10 @@ from typing import List
 import pytest
 
 from dbt_dry_run.models import Table
+from dbt_dry_run.models.dry_run_result import DryRunResult, LintingError
+from dbt_dry_run.models.report import DryRunStatus, LintingStatus
 from dbt_dry_run.result_reporter import ResultReporter
-from dbt_dry_run.results import (
-    DryRunResult,
-    DryRunStatus,
-    LintingError,
-    LintingStatus,
-    Results,
-)
+from dbt_dry_run.results import Results
 from dbt_dry_run.test.utils import SimpleNode
 
 
@@ -21,7 +17,6 @@ def successful_result() -> DryRunResult:
         table=Table(fields=[]),
         status=DryRunStatus.SUCCESS,
         exception=None,
-        total_bytes_processed=1000,
         linting_status=LintingStatus.SKIPPED,
     )
 
@@ -32,7 +27,6 @@ def failed_result() -> DryRunResult:
         node=SimpleNode(unique_id="B", depends_on=[]).to_node(),
         table=Table(fields=[]),
         status=DryRunStatus.FAILURE,
-        total_bytes_processed=0,
         exception=Exception("Oh no!"),
         linting_status=LintingStatus.SKIPPED,
     )
@@ -44,7 +38,6 @@ def failed_linting_result() -> DryRunResult:
         node=SimpleNode(unique_id="B", depends_on=[]).to_node(),
         table=Table(fields=[]),
         status=DryRunStatus.SUCCESS,
-        total_bytes_processed=1000,
         exception=None,
         linting_status=LintingStatus.FAILURE,
         linting_errors=[

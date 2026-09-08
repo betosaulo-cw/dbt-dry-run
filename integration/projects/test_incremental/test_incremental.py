@@ -10,7 +10,7 @@ from integration.utils import (
 
 def test_single_column_ignore_retains_schema_in_target(
     compiled_project: ProjectContext,
-):
+) -> None:
     node_id = "model.test_incremental.single_column_ignore"
     manifest_node = compiled_project.manifest.nodes[node_id]
     columns = ["my_string2 STRING"]
@@ -18,7 +18,7 @@ def test_single_column_ignore_retains_schema_in_target(
         run_result = compiled_project.dry_run()
         assert_report_produced(run_result)
         report_node = get_report_node_by_id(
-            run_result.report,
+            run_result.get_report(),
             node_id,
         )
         assert_report_node_has_columns(report_node, {"my_string2"})
@@ -26,7 +26,7 @@ def test_single_column_ignore_retains_schema_in_target(
 
 def test_single_column_append_new_columns_has_both_columns(
     compiled_project: ProjectContext,
-):
+) -> None:
     node_id = "model.test_incremental.single_column_append_new_columns"
     manifest_node = compiled_project.manifest.nodes[node_id]
     columns = ["my_string2 STRING"]
@@ -34,39 +34,103 @@ def test_single_column_append_new_columns_has_both_columns(
         run_result = compiled_project.dry_run()
         assert_report_produced(run_result)
         report_node = get_report_node_by_id(
-            run_result.report,
+            run_result.get_report(),
             node_id,
         )
         assert_report_node_has_columns(report_node, {"my_string", "my_string2"})
 
 
+def test_struct_column_append_new_field_has_all_fields(
+    compiled_project: ProjectContext,
+) -> None:
+    node_id = "model.test_incremental.struct_column_append_new_field"
+    manifest_node = compiled_project.manifest.nodes[node_id]
+    columns = ["my_struct STRUCT<my_string_1 STRING>"]
+    with compiled_project.create_state(manifest_node, columns):
+        run_result = compiled_project.dry_run()
+        assert_report_produced(run_result)
+        report_node = get_report_node_by_id(
+            run_result.get_report(),
+            node_id,
+        )
+        assert_report_node_has_columns(
+            report_node, {"my_struct", "my_struct.my_string_1", "my_struct.my_string_2"}
+        )
+
+
 def test_single_column_ignore_raises_error_if_column_type_changes(
     compiled_project: ProjectContext,
-):
+) -> None:
     node_id = "model.test_incremental.single_column_ignore"
     manifest_node = compiled_project.manifest.nodes[node_id]
     columns = ["my_string NUMERIC"]
     with compiled_project.create_state(manifest_node, columns):
         run_result = compiled_project.dry_run()
         assert_report_produced(run_result)
-        assert_node_failed_with_error(run_result.report, node_id, "BadRequest")
+        assert_node_failed_with_error(run_result.get_report(), node_id, "BadRequest")
 
 
-def test_single_struct_column_append_new_columns_fails_to_add_new_field(
+def test_struct_column_sync_all_columns_raises_error_if_nested_field_is_removed(
     compiled_project: ProjectContext,
-):
-    node_id = "model.test_incremental.single_struct_column_append_new_columns"
+) -> None:
+    node_id = "model.test_incremental.struct_column_remove_nested_field"
     manifest_node = compiled_project.manifest.nodes[node_id]
-    columns = ["my_struct STRUCT<my_string STRING>"]
+    columns = ["my_struct STRUCT<my_string_1 STRING, my_string_2 STRING>"]
     with compiled_project.create_state(manifest_node, columns):
         run_result = compiled_project.dry_run()
         assert_report_produced(run_result)
-        assert_node_failed_with_error(run_result.report, node_id, "BadRequest")
+        assert_node_failed_with_error(
+            run_result.get_report(), node_id, "SchemaChangeException"
+        )
+
+
+def test_fail_handler_raises_exception_if_top_level_fields_are_removed(
+    compiled_project: ProjectContext,
+) -> None:
+    top_level_node_id = "model.test_incremental.fail_handler_remove_top_level_field"
+    top_level_manifest_node = compiled_project.manifest.nodes[top_level_node_id]
+    top_level_columns = ["my_string STRING", "removed_col STRING"]
+    with compiled_project.create_state(top_level_manifest_node, top_level_columns):
+        top_level_run_result = compiled_project.dry_run()
+        assert_report_produced(top_level_run_result)
+        assert_node_failed_with_error(
+            top_level_run_result.get_report(),
+            top_level_node_id,
+            "SchemaChangeException",
+        )
+        top_level_output = top_level_run_result.process.stdout.decode(
+            "utf-8"
+        ) + top_level_run_result.process.stderr.decode("utf-8")
+        assert "Incremental model has changed schemas." in top_level_output
+        assert "Fields removed:" in top_level_output
+        assert "removed_col" in top_level_output
+
+
+def test_fail_handler_raises_exception_if_nested_fields_are_removed(
+    compiled_project: ProjectContext,
+) -> None:
+    nested_node_id = "model.test_incremental.fail_handler_remove_nested_field"
+    nested_manifest_node = compiled_project.manifest.nodes[nested_node_id]
+    nested_columns = ["my_struct STRUCT<kept_field STRING, removed_field STRING>"]
+    with compiled_project.create_state(nested_manifest_node, nested_columns):
+        nested_run_result = compiled_project.dry_run()
+        assert_report_produced(nested_run_result)
+        assert_node_failed_with_error(
+            nested_run_result.get_report(),
+            nested_node_id,
+            "SchemaChangeException",
+        )
+        nested_output = nested_run_result.process.stdout.decode(
+            "utf-8"
+        ) + nested_run_result.process.stderr.decode("utf-8")
+        assert "Incremental model has changed schemas." in nested_output
+        assert "Fields removed:" in nested_output
+        assert "my_struct.removed_field" in nested_output
 
 
 def test_cli_full_refresh_should_use_the_model_schema(
     compiled_project_full_refresh: ProjectContext,
-):
+) -> None:
     node_id = "model.test_incremental.double_column_none_full_refresh"
     manifest_node = compiled_project_full_refresh.manifest.nodes[node_id]
     columns = ["existing_column STRING"]
@@ -74,7 +138,7 @@ def test_cli_full_refresh_should_use_the_model_schema(
         run_result = compiled_project_full_refresh.dry_run(full_refresh=True)
         assert_report_produced(run_result)
         report_node = get_report_node_by_id(
-            run_result.report,
+            run_result.get_report(),
             node_id,
         )
         assert_report_node_has_columns(report_node, {"existing_column", "new_column"})
@@ -82,7 +146,7 @@ def test_cli_full_refresh_should_use_the_model_schema(
 
 def test_cli_full_refresh_with_full_refresh_set_to_false_on_the_model_use_the_target_schema(
     compiled_project_full_refresh: ProjectContext,
-):
+) -> None:
     node_id = "model.test_incremental.double_column_explicit_no_full_refresh"
     manifest_node = compiled_project_full_refresh.manifest.nodes[node_id]
     columns = ["existing_column STRING"]
@@ -90,7 +154,7 @@ def test_cli_full_refresh_with_full_refresh_set_to_false_on_the_model_use_the_ta
         run_result = compiled_project_full_refresh.dry_run(full_refresh=True)
         assert_report_produced(run_result)
         report_node = get_report_node_by_id(
-            run_result.report,
+            run_result.get_report(),
             node_id,
         )
         assert_report_node_has_columns(report_node, {"existing_column"})
@@ -98,7 +162,7 @@ def test_cli_full_refresh_with_full_refresh_set_to_false_on_the_model_use_the_ta
 
 def test_full_refresh_on_incremental_model_should_use_the_model_schema(
     compiled_project: ProjectContext,
-):
+) -> None:
     node_id = "model.test_incremental.double_column_model_full_refresh"
     manifest_node = compiled_project.manifest.nodes[node_id]
     columns = ["existing_column STRING"]
@@ -106,7 +170,7 @@ def test_full_refresh_on_incremental_model_should_use_the_model_schema(
         run_result = compiled_project.dry_run()
         assert_report_produced(run_result)
         report_node = get_report_node_by_id(
-            run_result.report,
+            run_result.get_report(),
             node_id,
         )
         assert_report_node_has_columns(report_node, {"existing_column", "new_column"})
@@ -114,7 +178,7 @@ def test_full_refresh_on_incremental_model_should_use_the_model_schema(
 
 def test_no_full_refresh_on_the_model_use_the_target_schema(
     compiled_project: ProjectContext,
-):
+) -> None:
     node_id = "model.test_incremental.double_column_explicit_no_full_refresh"
     manifest_node = compiled_project.manifest.nodes[node_id]
     columns = ["existing_column STRING"]
@@ -122,7 +186,7 @@ def test_no_full_refresh_on_the_model_use_the_target_schema(
         run_result = compiled_project.dry_run()
         assert_report_produced(run_result)
         report_node = get_report_node_by_id(
-            run_result.report,
+            run_result.get_report(),
             node_id,
         )
         assert_report_node_has_columns(report_node, {"existing_column"})
@@ -130,7 +194,7 @@ def test_no_full_refresh_on_the_model_use_the_target_schema(
 
 def test_column_order_preserved_on_schema_change_ignore(
     compiled_project: ProjectContext,
-):
+) -> None:
     node_id = "model.test_incremental.column_order_preserved_osc_ignore"
     manifest_node = compiled_project.manifest.nodes[node_id]
     columns = ["col_2 STRING", "col_1 STRING"]
@@ -138,7 +202,7 @@ def test_column_order_preserved_on_schema_change_ignore(
         run_result = compiled_project.dry_run()
         assert_report_produced(run_result)
         report_node = get_report_node_by_id(
-            run_result.report,
+            run_result.get_report(),
             node_id,
         )
         assert_report_node_has_columns_in_order(report_node, ["col_2", "col_1"])
@@ -146,7 +210,7 @@ def test_column_order_preserved_on_schema_change_ignore(
 
 def test_recursive_cte_does_not_check_merge_compatibility(
     compiled_project: ProjectContext,
-):
+) -> None:
     node_id = "model.test_incremental.recursive_cte"
     manifest_node = compiled_project.manifest.nodes[node_id]
     columns = ["my_string NUMERIC"]
@@ -154,7 +218,7 @@ def test_recursive_cte_does_not_check_merge_compatibility(
         run_result = compiled_project.dry_run()
         assert_report_produced(run_result)
         report_node = get_report_node_by_id(
-            run_result.report,
+            run_result.get_report(),
             node_id,
         )
         assert_report_node_has_columns(report_node, {"my_string"})
@@ -162,7 +226,7 @@ def test_recursive_cte_does_not_check_merge_compatibility(
 
 def test_column_order_preserved_on_schema_change_append_new_columns(
     compiled_project: ProjectContext,
-):
+) -> None:
     node_id = "model.test_incremental.column_order_preserved_osc_append"
     manifest_node = compiled_project.manifest.nodes[node_id]
     columns = ["col_2 STRING", "col_1 STRING"]
@@ -170,7 +234,7 @@ def test_column_order_preserved_on_schema_change_append_new_columns(
         run_result = compiled_project.dry_run()
         assert_report_produced(run_result)
         report_node = get_report_node_by_id(
-            run_result.report,
+            run_result.get_report(),
             node_id,
         )
         assert_report_node_has_columns_in_order(report_node, ["col_2", "col_1"])
@@ -178,7 +242,7 @@ def test_column_order_preserved_on_schema_change_append_new_columns(
 
 def test_required_partition_filter(
     compiled_project: ProjectContext,
-):
+) -> None:
     node_id = "model.test_incremental.required_partition_filter"
     manifest_node = compiled_project.manifest.nodes[node_id]
     columns = ["col_1 STRING", "col_2 STRING", "snapshot_date DATE"]
@@ -186,7 +250,7 @@ def test_required_partition_filter(
         run_result = compiled_project.dry_run()
         assert_report_produced(run_result)
         report_node = get_report_node_by_id(
-            run_result.report,
+            run_result.get_report(),
             node_id,
         )
         assert_report_node_has_columns_in_order(
@@ -196,7 +260,7 @@ def test_required_partition_filter(
 
 def test_sql_header_and_max_partition(
     compiled_project: ProjectContext,
-):
+) -> None:
     node_id = "model.test_incremental.with_sql_header_and_dbt_max_partition"
     manifest_node = compiled_project.manifest.nodes[node_id]
     columns = ["snapshot_date", "my_string STRING", "my_func_output STRING"]
@@ -204,9 +268,45 @@ def test_sql_header_and_max_partition(
         run_result = compiled_project.dry_run()
         assert_report_produced(run_result)
         report_node = get_report_node_by_id(
-            run_result.report,
+            run_result.get_report(),
             node_id,
         )
         assert_report_node_has_columns_in_order(
             report_node, ["snapshot_date", "my_string", "my_func_output"]
+        )
+
+
+def test_partition_by_time_ingestion(
+    compiled_project: ProjectContext,
+) -> None:
+    node_id = "model.test_incremental.partition_by_time_ingestion"
+    manifest_node = compiled_project.manifest.nodes[node_id]
+    columns = ["executed_at", "col_1 STRING", "col_2 STRING"]
+    with compiled_project.create_state(manifest_node, columns, "_PARTITIONTIME", False):
+        run_result = compiled_project.dry_run()
+        assert_report_produced(run_result)
+        report_node = get_report_node_by_id(
+            run_result.get_report(),
+            node_id,
+        )
+        assert_report_node_has_columns_in_order(
+            report_node, ["executed_at", "col_1", "col_2", "_PARTITIONTIME"]
+        )
+
+
+def test_partition_by_partitiontime_does_not_add_partitiontime_column(
+    compiled_project: ProjectContext,
+) -> None:
+    node_id = "model.test_incremental.partition_by_partitiontime"
+    manifest_node = compiled_project.manifest.nodes[node_id]
+    columns = ["_PARTITIONTIME TIMESTAMP", "col_1 STRING", "col_2 STRING"]
+    with compiled_project.create_state(manifest_node, columns, "_PARTITIONTIME", False):
+        run_result = compiled_project.dry_run()
+        assert_report_produced(run_result)
+        report_node = get_report_node_by_id(
+            run_result.get_report(),
+            node_id,
+        )
+        assert_report_node_has_columns_in_order(
+            report_node, ["_PARTITIONTIME", "col_1", "col_2"]
         )

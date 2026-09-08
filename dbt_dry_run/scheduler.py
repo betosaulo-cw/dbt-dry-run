@@ -14,6 +14,7 @@ class ManifestScheduler:
     TEST = "test"
     RUNNABLE_RESOURCE_TYPE = (MODEL, SEED, SNAPSHOT, SOURCE, TEST)
     RUNNABLE_MATERIAL = (
+        # custom materializations
         "incremental_partitioned",
         "alert",
         "scd_table",
@@ -21,12 +22,14 @@ class ManifestScheduler:
         "fm_table",
         "fm_incremental",
         "fm_incremental_partitioned",
+        # default materializations
         "view",
         "table",
         "incremental",
         "seed",
         "snapshot",
-        "test"
+        "test",
+        "materialized_view",
     )
 
     def __init__(self, manifest: Manifest, model: Optional[str] = None):

@@ -3,8 +3,9 @@ version: 2
 models:
   - name: badly_documented_model
     description: This model is missing some columns in its docs
-    meta:
-      dry_run.check_columns: true
+    config:
+      meta:
+        dry_run.check_columns: true
     columns:
       - name: a
         description: This is in the model
@@ -20,8 +21,9 @@ models:
 
   - name: model_linting_disabled
     description: This model is missing some columns in its docs, but should not error as linting is disabled
-#    meta:
-#      dry_run.check_columns: false
+#    config:
+#      meta:
+#        dry_run.check_columns: false
     columns:
       - name: a
         description: This is in the model
@@ -34,8 +36,9 @@ models:
 
   - name: model_with_struct
     description: This model is correctly documented as a struct
-    meta:
-      dry_run.check_columns: true
+    config:
+      meta:
+        dry_run.check_columns: true
     columns:
       - name: a
         description: This is in the model

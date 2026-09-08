@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import jinja2
 import yaml
-from pydantic import Field, root_validator
+from pydantic import Field, model_validator
 from pydantic.main import BaseModel
 
 
@@ -27,12 +27,12 @@ class Output(BaseModel):
     impersonate_service_account: Optional[str] = None
     scopes: List[str] = []
 
-    @root_validator(pre=True)
+    @model_validator(mode="before")
     def validate_dataset_or_schema(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         if values.get("schema") and values.get("dataset"):
-            raise ValueError(f"Must specify one of dataset or schema")
+            raise ValueError("Must specify one of dataset or schema")
         elif not values.get("schema") and not values.get("dataset"):
-            raise ValueError(f"Must specify dataset or schema")
+            raise ValueError("Must specify dataset or schema")
         values["dataset"] = values.get("dataset", values.get("schema"))
         return values
 
@@ -41,7 +41,7 @@ class Profile(BaseModel):
     outputs: Dict[str, Output]
     target: str
 
-    @root_validator(pre=True)
+    @model_validator(mode="before")
     def target_must_be_valid_output(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         output_keys = set(values["outputs"].keys())
         target = values["target"]
@@ -52,7 +52,7 @@ class Profile(BaseModel):
         return values
 
 
-def profiles_get_env_var(key: str, default: str = None) -> Optional[str]:
+def profiles_get_env_var(key: str, default: Optional[str] = None) -> Optional[str]:
     return os.environ.get(key, default)
 
 

@@ -1,51 +1,52 @@
-[tool.poetry]
+[project]
 name = "dbt-dry-run"
-version = "0.7.8"
+version = "0.10.2"
 description = "Dry run dbt projects"
-authors = ["Connor Charles <connor.charles@autotrader.co.uk>",
-           "Phil hope <philip.hope@autotrader.co.uk>",
-           "Angelos Georgiadis <angelos.georgiadis@autotrader.co.uk>",
-           "Richard Wilmer <richard.wilmer@autotrader.co.uk>"]
+authors = [
+  { name = "Connor Charles", email = "connor.charles@autotrader.co.uk" },
+  { name = "Phil hope", email = "philip.hope@autotrader.co.uk" },
+  { name = "Angelos Georgiadis", email = "angelos.georgiadis@autotrader.co.uk" },
+  { name = "Richard Wilmer", email = "richard.wilmer@autotrader.co.uk" },
+  { name = "Cat Wates", email = "catherine.wates@autotrader.co.uk" },
+  { name = "Shu Wang", email = "shu.wang@autotrader.co.uk" },
+  { name = "Evie Crutchley", email = "evie.crutchley@autotrader.co.uk" },
+  { name = "Stevie Woods", email = "steven.woods@autotrader.co.uk" },
+  { name = "Sien Figoureux", email = "sien.figoureux@autotrader.co.uk" },
+]
 readme = "README.md"
 license = "Apache-2.0"
 repository = "https://github.com/autotraderuk/dbt-dry-run"
+requires-python = ">=3.10,<3.15"
+dependencies = [
+  "agate>=1.7.0,<1.10",
+  "google-cloud-bigquery>=3,<4",
+  "pydantic<3",
+  "tenacity>=8.2,<9",
+  "networkx>=2.3,<4.0",
+  "pyyaml>=6,<7",
+  "typer>=0,<1",
+]
 
-[tool.poetry.scripts]
+[project.scripts]
 dbt-dry-run = "dbt_dry_run.__main__:main"
 
-[tool.poetry.dependencies]
-python = ">=3.8,<3.13"
-agate = ">=1.7.0,<1.10"
-google-cloud-bigquery = "^3"
-pydantic = "^1.9.0"
-tenacity = "^8.2"
-networkx = ">=2.3,<4.0"
-pyyaml = "~6"
-typer = "~0"
-
-[tool.poetry.dev-dependencies]
-black = "^22"
-isort = "^5.10.1"
-pytest = "^7.2.0"
-mypy = "^0.981"
-types-PyYAML = "^6.0.4"
-pytest-cov = "^4.0.0"
-twine = "^3.8.0"
-types-setuptools = "^57.4.9"
-pytest-mock = "^3.7.0"
-dbt-bigquery = "~1.8.0"
-numpy = [
-  {version = ">=1.26", python = ">=3.9"},
-  {version = "<1.25", python = "=3.8"},
-]
-pandas = [
-  {version = ">=2.1.1", python = ">=3.12"},
-  {version = "<2.1", python = "=3.8"},
+[dependency-groups]
+dev = [
+  "ruff>=0.11.5,<0.12",
+  "pytest>=9.0.0,<10",
+  "types-pyyaml>=6.0.12.20250915,<7",
+  "pytest-cov>=4.0.0,<5",
+  "twine>=3.8.0,<4",
+  "pytest-mock>=3.7.0,<4",
+  "dbt-bigquery>=1.12.0,<1.13",
+  "numpy>=1.26; python_version >= '3.9'",
+  "pandas>=2.1.1; python_version >= '3.12'",
+  "mypy>=1.18.2,<2",
 ]
 
 [build-system]
-requires = ["poetry-core>=1.5.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = "dbt_dry_run/test"
@@ -60,6 +61,9 @@ filterwarnings = [
     "ignore::UserWarning",
     "ignore:.*custom tp_new.*in Python 3.14.*:DeprecationWarning",
     "ignore:.*utcnow.*:DeprecationWarning",
+    "ignore:.*is deprecated and will be removed in Click 9.0.*",
+    "ignore:.*Please upgrade to the latest Python version.*",
+    'ignore:.*Use open\(\) instead.*'
 ]
 pythonpath = [
   "."
@@ -79,10 +83,6 @@ exclude_lines = [
     "@overload"
 ]
 
-[tool.isort]
-profile = "black"
-src_paths = "dbt_dry_run"
-
 [tool.mypy]
 follow_imports = "silent"
 strict_optional = true
@@ -98,3 +98,4 @@ disallow_untyped_decorators = true
 disallow_untyped_calls = false
 disallow_untyped_defs = true
 ignore_missing_imports = true
+plugins = ['pydantic.mypy']

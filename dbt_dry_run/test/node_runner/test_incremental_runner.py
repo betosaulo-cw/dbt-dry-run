@@ -1,22 +1,15 @@
 from typing import List, Optional
-from unittest.mock import MagicMock, call
-
-import pytest
+from unittest.mock import MagicMock, call, patch
 
 from dbt_dry_run import flags
 from dbt_dry_run.exception import SchemaChangeException
-from dbt_dry_run.literals import enable_test_example_values
 from dbt_dry_run.models import BigQueryFieldType, Table, TableField
 from dbt_dry_run.models.manifest import NodeConfig, PartitionBy
-from dbt_dry_run.node_runner.incremental_runner import (
-    IncrementalRunner,
-    append_new_columns_handler,
-    get_merge_sql,
-    sql_has_recursive_ctes,
-    sync_all_columns_handler,
-)
-from dbt_dry_run.results import DryRunResult, DryRunStatus, Results
+from dbt_dry_run.models.report import DryRunStatus
+from dbt_dry_run.node_runner.incremental_runner import IncrementalRunner
+from dbt_dry_run.results import Results
 from dbt_dry_run.scheduler import ManifestScheduler
+from dbt_dry_run.sql.literals import enable_test_example_values
 from dbt_dry_run.test.utils import SimpleNode, assert_result_has_table, get_executed_sql
 
 enable_test_example_values(True)
@@ -30,27 +23,22 @@ A_SIMPLE_TABLE = Table(
     ]
 )
 
-A_TOTAL_BYTES_PROCESSED = 1000
-
-A_NODE = SimpleNode(
-    unique_id="node1", depends_on=[], resource_type=ManifestScheduler.MODEL
-).to_node()
-
 
 def get_mock_sql_runner_with_all_string_columns(
-    model_names: List[str], target_names: Optional[List[str]]
+    model_field_names: List[str], target_field_names: Optional[List[str]]
 ) -> MagicMock:
     model_schema = Table(
         fields=[
-            TableField(name=name, type=BigQueryFieldType.STRING) for name in model_names
+            TableField(name=name, type=BigQueryFieldType.STRING)
+            for name in model_field_names
         ]
     )
     target_schema: Optional[Table] = None
-    if target_names:
+    if target_field_names:
         target_schema = Table(
             fields=[
                 TableField(name=name, type=BigQueryFieldType.STRING)
-                for name in target_names
+                for name in target_field_names
             ]
         )
     return get_mock_sql_runner_with(model_schema, target_schema)
@@ -60,7 +48,7 @@ def get_mock_sql_runner_with(
     model_schema: Table, target_schema: Optional[Table]
 ) -> MagicMock:
     mock_sql_runner = MagicMock()
-    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, model_schema, 0, None)
+    mock_sql_runner.query.return_value = (DryRunStatus.SUCCESS, model_schema, None)
     mock_sql_runner.get_node_schema.return_value = target_schema
     return mock_sql_runner
 
@@ -73,7 +61,6 @@ def test_partitioned_incremental_model_declares_dbt_max_partition_variable() -> 
     mock_sql_runner.query.return_value = (
         DryRunStatus.SUCCESS,
         A_SIMPLE_TABLE,
-        A_TOTAL_BYTES_PROCESSED,
         None,
     )
 
@@ -106,6 +93,48 @@ def test_partitioned_incremental_model_declares_dbt_max_partition_variable() -> 
     assert node.compiled_code in executed_sql
 
 
+def test_partitioned_incremental_model_does_not_add_partitiontime_column_when_field_already_exist() -> (
+    None
+):
+    mock_sql_runner = MagicMock()
+    mock_sql_runner.query.return_value = (
+        DryRunStatus.SUCCESS,
+        Table(fields=[TableField(name="a", type=BigQueryFieldType.STRING)]),
+        None,
+    )
+    mock_sql_runner.get_node_schema.return_value = None
+
+    node = SimpleNode(
+        unique_id="node1",
+        depends_on=[],
+        resource_type=ManifestScheduler.MODEL,
+        table_config=NodeConfig(
+            materialized="incremental",
+            partition_by=PartitionBy(
+                field="_PARTITIONTIME",
+                data_type="timestamp",
+                time_ingestion_partitioning=True,
+            ),
+        ),
+    ).to_node()
+    node.depends_on.deep_nodes = []
+
+    model_runner = IncrementalRunner(mock_sql_runner, Results())
+    with patch.object(
+        model_runner,
+        "_replace_partition_with_time_ingestion_column",
+        wraps=model_runner._replace_partition_with_time_ingestion_column,
+    ) as replace_partition_mock:
+        updated_result = model_runner.run(node)
+
+    assert replace_partition_mock.called
+    assert updated_result.table is not None
+    assert set([field.name for field in updated_result.table.fields]) == {
+        "a",
+        "_PARTITIONTIME",
+    }
+
+
 def test_incremental_model_that_does_not_exist_returns_dry_run_schema() -> None:
     mock_sql_runner = get_mock_sql_runner_with_all_string_columns(["a"], None)
     expected_table = Table(
@@ -134,7 +163,9 @@ def test_incremental_model_that_does_not_exist_returns_dry_run_schema() -> None:
     assert_result_has_table(expected_table, result)
 
 
-def test_incremental_model_that_exists_and_has_a_column_removed_and_readded_with_new_name() -> None:
+def test_incremental_model_that_exists_and_has_a_column_removed_and_readded_with_new_name() -> (
+    None
+):
     mock_sql_runner = get_mock_sql_runner_with_all_string_columns(
         ["a", "b"], ["a", "c"]
     )
@@ -161,8 +192,6 @@ def test_incremental_model_that_exists_and_has_a_column_removed_and_readded_with
     model_runner = IncrementalRunner(mock_sql_runner, results)
 
     result = model_runner.run(node)
-    merge_sql = get_merge_sql(node, ["a"], node.compiled_code)
-    mock_sql_runner.query.assert_has_calls([call(node.compiled_code), call(merge_sql)])
     assert_result_has_table(expected_table, result)
 
 
@@ -183,8 +212,6 @@ def test_incremental_model_that_exists_and_has_a_column_added_does_nothing() -> 
     model_runner = IncrementalRunner(mock_sql_runner, results)
 
     result = model_runner.run(node)
-    merge_sql = get_merge_sql(node, ["a"], node.compiled_code)
-    mock_sql_runner.query.assert_has_calls([call(node.compiled_code), call(merge_sql)])
     assert_result_has_table(expected_table, result)
 
 
@@ -249,8 +276,6 @@ def test_incremental_model_that_exists_and_syncs_all_columns() -> None:
     model_runner = IncrementalRunner(mock_sql_runner, results)
 
     result = model_runner.run(node)
-    merge_sql = get_merge_sql(node, ["a"], node.compiled_code)
-    mock_sql_runner.query.assert_has_calls([call(node.compiled_code), call(merge_sql)])
     assert_result_has_table(expected_table, result)
 
 
@@ -272,8 +297,6 @@ def test_incremental_model_that_exists_and_fails_when_schema_changed() -> None:
     model_runner = IncrementalRunner(mock_sql_runner, results)
 
     result = model_runner.run(node)
-    merge_sql = get_merge_sql(node, ["a"], node.compiled_code)
-    mock_sql_runner.query.assert_has_calls([call(node.compiled_code), call(merge_sql)])
     assert result.status == DryRunStatus.FAILURE
     assert isinstance(result.exception, SchemaChangeException)
 
@@ -295,8 +318,6 @@ def test_incremental_model_that_exists_and_success_when_schema_not_changed() -> 
     model_runner = IncrementalRunner(mock_sql_runner, results)
 
     result = model_runner.run(node)
-    merge_sql = get_merge_sql(node, ["a", "b"], node.compiled_code)
-    mock_sql_runner.query.assert_has_calls([call(node.compiled_code), call(merge_sql)])
     assert result.status == DryRunStatus.SUCCESS
 
 
@@ -317,14 +338,7 @@ def test_node_with_no_full_refresh_does_not_full_refresh_when_flag_is_false(
     node_with_no_full_refresh_config.depends_on.deep_nodes = []
 
     IncrementalRunner(mock_sql_runner, Results()).run(node_with_no_full_refresh_config)
-    merge_sql = get_merge_sql(
-        node_with_no_full_refresh_config,
-        ["a"],
-        node_with_no_full_refresh_config.compiled_code,
-    )
-    mock_sql_runner.query.assert_has_calls(
-        [call(node_with_no_full_refresh_config.compiled_code), call(merge_sql)]
-    )
+
     assert len(mock_sql_runner.get_node_schema.call_args_list) == 1
     mock_sql_runner.get_node_schema.assert_called_with(node_with_no_full_refresh_config)
 
@@ -350,9 +364,9 @@ def test_node_full_refresh_true_does_full_refresh_when_flag_is_false(
     mock_sql_runner.query.assert_has_calls(
         [call(node_with_full_refresh_set_to_true.compiled_code)]
     )
-    assert (
-        not mock_sql_runner.get_node_schema.called
-    ), "If full refresh we do not look at the target node schema"
+    assert not mock_sql_runner.get_node_schema.called, (
+        "If full refresh we do not look at the target node schema"
+    )
 
 
 def test_node_full_refresh_false_does_full_refresh_when_flag_is_false(
@@ -373,14 +387,6 @@ def test_node_full_refresh_false_does_full_refresh_when_flag_is_false(
 
     IncrementalRunner(mock_sql_runner, Results()).run(
         node_with_full_refresh_set_to_false
-    )
-    merge_sql = get_merge_sql(
-        node_with_full_refresh_set_to_false,
-        ["a"],
-        node_with_full_refresh_set_to_false.compiled_code,
-    )
-    mock_sql_runner.query.assert_has_calls(
-        [call(node_with_full_refresh_set_to_false.compiled_code), call(merge_sql)]
     )
     mock_sql_runner.get_node_schema.assert_has_calls(
         [call(node_with_full_refresh_set_to_false)]
@@ -454,14 +460,6 @@ def test_node_with_false_full_refresh_does_not_full_refresh_when_flag_is_true(
     IncrementalRunner(mock_sql_runner, Results()).run(
         node_with_full_refresh_set_to_false
     )
-    merge_sql = get_merge_sql(
-        node_with_full_refresh_set_to_false,
-        ["a"],
-        node_with_full_refresh_set_to_false.compiled_code,
-    )
-    mock_sql_runner.query.assert_has_calls(
-        [call(node_with_full_refresh_set_to_false.compiled_code), call(merge_sql)]
-    )
     assert len(mock_sql_runner.get_node_schema.call_args_list) == 1
     mock_sql_runner.get_node_schema.assert_called_with(
         node_with_full_refresh_set_to_false
@@ -473,7 +471,6 @@ def test_model_with_sql_header_executes_header_first() -> None:
     mock_sql_runner.query.return_value = (
         DryRunStatus.SUCCESS,
         A_SIMPLE_TABLE,
-        A_TOTAL_BYTES_PROCESSED,
         None,
     )
 
@@ -493,104 +490,3 @@ def test_model_with_sql_header_executes_header_first() -> None:
     executed_sql = get_executed_sql(mock_sql_runner)
     assert executed_sql.startswith(pre_header_value)
     assert node.compiled_code in executed_sql
-
-
-def test_append_handler_preserves_existing_column_order() -> None:
-    model_table = Table(
-        fields=[
-            TableField(name="col_1", type=BigQueryFieldType.STRING),
-            TableField(name="col_2", type=BigQueryFieldType.STRING),
-            TableField(name="col_3", type=BigQueryFieldType.STRING),
-        ]
-    )
-    dry_run_result = DryRunResult(
-        node=A_NODE,
-        status=DryRunStatus.SUCCESS,
-        table=model_table,
-        total_bytes_processed=0,
-        exception=None,
-    )
-    target_table = Table(
-        fields=[
-            TableField(name="col_2", type=BigQueryFieldType.STRING),
-            TableField(name="col_1", type=BigQueryFieldType.STRING),
-        ]
-    )
-    actual_result = append_new_columns_handler(dry_run_result, target_table)
-
-    expected_table = Table(
-        fields=[
-            TableField(name="col_2", type=BigQueryFieldType.STRING),
-            TableField(name="col_1", type=BigQueryFieldType.STRING),
-            TableField(name="col_3", type=BigQueryFieldType.STRING),
-        ]
-    )
-
-    assert actual_result.table == expected_table
-
-
-def test_sync_handler_preserves_existing_column_order() -> None:
-    model_table = Table(
-        fields=[
-            TableField(name="col_3", type=BigQueryFieldType.STRING),
-            TableField(name="col_2", type=BigQueryFieldType.STRING),
-            TableField(name="col_4", type=BigQueryFieldType.STRING),
-        ]
-    )
-    dry_run_result = DryRunResult(
-        node=A_NODE,
-        status=DryRunStatus.SUCCESS,
-        table=model_table,
-        total_bytes_processed=0,
-        exception=None,
-    )
-    target_table = Table(
-        fields=[
-            TableField(name="col_1", type=BigQueryFieldType.STRING),
-            TableField(name="col_2", type=BigQueryFieldType.STRING),
-            TableField(name="col_3", type=BigQueryFieldType.STRING),
-        ]
-    )
-    actual_result = sync_all_columns_handler(dry_run_result, target_table)
-
-    expected_table = Table(
-        fields=[
-            TableField(name="col_2", type=BigQueryFieldType.STRING),
-            TableField(name="col_3", type=BigQueryFieldType.STRING),
-            TableField(name="col_4", type=BigQueryFieldType.STRING),
-        ]
-    )
-
-    assert actual_result.table == expected_table
-
-
-@pytest.mark.parametrize(
-    "code, has_ctes",
-    [
-        (
-            """WITH RECURSIVE my_foo as (SELECT * FROM foo)""",
-            True,
-        ),
-        (
-            """with recursive my_foo as (SELECT * FROM foo)""",
-            True,
-        ),
-        (
-            """  with   recursive    my_foo as (SELECT * FROM foo)""",
-            True,
-        ),
-        (
-            """  with
-                  RECURSIVE 
-                     my_foo as (SELECT * FROM foo)""",
-            True,
-        ),
-        (
-            """  with
-                     my_foo as (SELECT recursive FROM foo)""",
-            False,
-        ),
-    ],
-)
-def test_sql_has_recursive_ctes(code: str, has_ctes: bool) -> None:
-    assert sql_has_recursive_ctes(code) == has_ctes

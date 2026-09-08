@@ -5,18 +5,23 @@ import agate as ag
 
 from dbt_dry_run.exception import UnknownSchemaException
 from dbt_dry_run.models import BigQueryFieldType, Table, TableField
+from dbt_dry_run.models.dry_run_result import DryRunResult
 from dbt_dry_run.models.manifest import Node
+from dbt_dry_run.models.report import DryRunStatus
 from dbt_dry_run.node_runner import NodeRunner
-from dbt_dry_run.results import DryRunResult, DryRunStatus
 
 
 class SeedRunner(NodeRunner):
+    DEFAULT_DELIMITER = ","
+
     def run(self, node: Node) -> DryRunResult:
         if not node.root_path:
             raise ValueError(f"Node {node.unique_id} does not have `root_path`")
         full_path = os.path.join(node.root_path, node.original_file_path)
         with open(full_path, "r", encoding="utf-8-sig") as f:
-            csv_table = ag.Table.from_csv(f)
+            csv_table = ag.Table.from_csv(
+                f, delimiter=node.config.delimiter or self.DEFAULT_DELIMITER
+            )
 
         fields: List[TableField] = []
         for idx, column in enumerate(csv_table.columns):
@@ -31,7 +36,6 @@ class SeedRunner(NodeRunner):
                     node=node,
                     table=None,
                     status=DryRunStatus.FAILURE,
-                    total_bytes_processed=0,
                     exception=exception,
                 )
             new_field = TableField(
@@ -44,9 +48,8 @@ class SeedRunner(NodeRunner):
             node=node,
             table=schema,
             status=DryRunStatus.SUCCESS,
-            total_bytes_processed=0,
             exception=None,
         )
 
-    def validate_node(self, node: Node) -> Optional[DryRunResult]:
+    def check_node_compiled(self, node: Node) -> Optional[DryRunResult]:
         return None

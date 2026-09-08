@@ -27,4 +27,4 @@ models:
 
     sub_dir:
       +meta:
-         dry_run.check_columns: true
+        dry_run.check_columns: true

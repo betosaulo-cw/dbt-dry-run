@@ -130,8 +130,9 @@ For example the full metadata for this model:
 models:
   - name: badly_documented_model
     description: This model is missing some columns in its docs
-    meta:
-      dry_run.check_columns: true
+    config:
+      meta:
+        dry_run.check_columns: true
     columns:
       - name: a
         description: This is in the model
@@ -281,12 +282,9 @@ There are certain cases where a syntactically valid query can fail due to the da
 2. `NULL` values in `ARRAY_AGG` (See [IGNORE_NULLS bullet point][bq-ignore-nulls])
 3. Bad query performance that makes it too complex/expensive to run
 
-### Things still to do...
+In an incremental table, it is not possible to change the data type of a nested field within a `RECORD`. dbt-dry-run will not flag such a change as a failure.
 
-The implementation of seeds is incomplete as we don't use them very much in our own dbt projects. The dry runner
-will just use the datatypes that `agate` infers from the CSV files. It will ignore any type overrides you add in the YAML.
-
-If you see anything else that you think it should catch don't hesitate to raise an issue!
+The dry runner will not test schema changes for materialized views. It will only test the syntax of the SQL query.
 
 [dbt-home]: https://www.getdbt.com/
 
@@ -296,9 +294,9 @@ If you see anything else that you think it should catch don't hesitate to raise 
 
 [bq-ignore-nulls]: https://cloud.google.com/bigquery/docs/reference/standard-sql/aggregate_functions#array_agg
 
-[blog-post]: https://engineering.autotrader.co.uk/2022/04/06/dry-running-our-data-warehouse-using-bigquery-and-dbt.html
+[blog-post]: https://medium.com/autotrader-engineering/dry-running-our-data-warehouse-using-bigquery-and-dbt-12ccae0209f1
 
-[get-poetry]: https://python-poetry.org/
+[get-uv]: https://docs.astral.sh/uv/
 
 [dbt-external-tables]: https://github.com/dbt-labs/dbt-external-tables
 
@@ -306,7 +304,7 @@ If you see anything else that you think it should catch don't hesitate to raise 
 
 ## License
 
-Copyright 2022 Auto Trader Limited
+Copyright 2026 Autotrader Limited
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
 License. You may obtain a copy of the License at

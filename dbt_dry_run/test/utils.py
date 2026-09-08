@@ -4,8 +4,9 @@ from unittest.mock import MagicMock
 from pydantic import BaseModel, Field
 
 from dbt_dry_run.models import BigQueryFieldMode, BigQueryFieldType, Table, TableField
+from dbt_dry_run.models.dry_run_result import DryRunResult
 from dbt_dry_run.models.manifest import Node, NodeConfig, NodeDependsOn, NodeMeta
-from dbt_dry_run.results import DryRunResult, DryRunStatus
+from dbt_dry_run.models.report import DryRunStatus
 from dbt_dry_run.scheduler import ManifestScheduler
 
 A_SQL_QUERY = "SELECT * FROM `foo`"
@@ -21,9 +22,10 @@ class SimpleNode(BaseModel):
     database: str = "my_db"
     db_schema: str = Field("my_schema", alias="schema")
     compiled_code: str = A_SQL_QUERY
-    original_file_path: str = f"test123.sql"
+    original_file_path: str = "test123.sql"
     root_path: str = "/home/"
-    meta: Optional[NodeMeta]
+    meta: Optional[NodeMeta] = None
+    language: str = "python"
 
     def to_node(self) -> Node:
         depends_on = NodeDependsOn(
@@ -45,10 +47,11 @@ class SimpleNode(BaseModel):
             root_path=self.root_path,
             columns=dict(),
             meta=self.meta,
+            language=self.language,
         )
 
 
-SimpleNode.update_forward_refs()
+SimpleNode.model_rebuild()
 
 
 def field_with_name(
@@ -74,6 +77,6 @@ def assert_result_has_table(expected: Table, actual: DryRunResult) -> None:
     actual_field_names = set([field.name for field in actual.table.fields])
     expected_field_names = set([field.name for field in expected.fields])
 
-    assert (
-        actual_field_names == expected_field_names
-    ), f"Actual field names: {actual_field_names} did not equal expected: {expected_field_names}"
+    assert actual_field_names == expected_field_names, (
+        f"Actual field names: {actual_field_names} did not equal expected: {expected_field_names}"
+    )

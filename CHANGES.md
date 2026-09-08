@@ -1,5 +1,98 @@
 ## Changelog
 
+# dbt-dry-run v0.10.2
+
+## Bugfixes
+
+- Parse `--vars` using YAML instead of JSON so less strict YAML inputs are accepted while JSON-style quoting still works.
+
+# dbt-dry-run v0.10.1
+
+## Under The Hood
+
+- Do not read deprecated top level 'meta' key in nodes as this was deprecated a while ago and is not compatible with fusion
+
+# dbt-dry-run v0.10.0
+
+## Improvements
+
+- Limited support for materialized views. Due to BigQuery dry-run limitations for materialized views, only SQL syntax validation is supported.
+  Schema change validation is not supported.
+
+# dbt-dry-run v0.9.1
+
+## Bugfixes
+
+- Fix issue where `_PARTITIONTIME` was duplicated in the predicted schema [@ni-tami]
+
+# dbt-dry-run v0.9.0
+
+## Improvements
+
+- Allow addition of nested fields to STRUCT columns in incremental tables when schema change config is set to 
+  `append_new_columns` or `sync_new_columns`. This is a feature introduced in dbt v1.11. This means the dry run may 
+  erroneously succeed for earlier versions of dbt.
+
+# dbt-dry-run v0.8.7
+
+## Improvements
+
+- Official compatibility with dbt v1.11
+
+# dbt-dry-run v0.8.6
+
+## Under The Hood
+
+- Support Pydantic V2
+
+# dbt-dry-run v0.8.5
+
+## Improvements
+
+- Officially support dbt-core 1.10
+- Support python 3.13
+
+## Bugfixes
+
+- Fix incorrect snapshot meta column name `is_deleted` -> `dbt_is_deleted`
+
+# dbt-dry-run v0.8.4
+
+## Improvements
+
+- Include is_deleted column for snapshots where hard_deletes='new_record'
+
+## Bugfixes
+
+- Basic support for materialized views. This materialisation will be treated as a normal view. This means the dry run
+  may erroneously succeed if it contains SQL that is not supported for materialised views.
+
+# dbt-dry-run v0.8.3
+
+## Bugfixes
+
+- Fix dry runner falsely reporting failure when reading BQ columns that are masked via column-level access control
+
+# dbt-dry-run v0.8.2
+
+## Improvements
+
+- Support seeds with non default delimiters
+
+# dbt-dry-run v0.8.1
+
+## Improvements
+
+- Official compatibility with dbt v1.9
+- Drop support for python 3.8
+
+# dbt-dry-run v0.8.0
+
+## Improvements
+
+- Support for python 3.12
+- Add support incremental models for ingestion time partitioning
+
 # dbt-dry-run v0.7.8
 
 ## Improvements
